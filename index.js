@@ -8,13 +8,32 @@ require('dotenv').config()
 const port = process.env.PORT || 5000;
 const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
 
-app.use(cors());
+app.use(cors({
+    origin: ['http://localhost:5173'],
+    credentials: true
+}));
 app.use(express.json());
 app.use(cookieParser())
 
+const verifyToken = (req,res,next)=>{
+    const token = req.cookies?.token;
+    
+    if(!token){
+        return res.status(401).send({message: 'unAuthorized Access'})
+    }
+
+    // verify the token
+    jwt.verify(token, process.env.JWT_SECRET, (err,decoded)=>{
+        if(err){
+            return res.status(401).send({message: 'unAuthorized Access'})
+        }
+        next()
+    })
+
+}
+
 const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@cluster0.eko35.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0`;
 // const uri = 'mongodb://localhost:27017'
-
 
 // Create a MongoClient with a MongoClientOptions object to set the Stable API version
 const client = new MongoClient(uri, {
@@ -48,6 +67,7 @@ async function run() {
                     secure: false
                 })
                 .send({ success: true })
+                console.log('object')
         })
 
         // jobs related APIs
@@ -61,6 +81,15 @@ async function run() {
             const result = await cursor.toArray();
             res.send(result);
         });
+
+        app.post('/logOut', (req,res)=>{
+            res
+            .clearCookie('token',{
+                httpOnly: true,
+                secure: false
+            })
+            .send({success: true})
+        })
 
         app.get('/jobs/:id', async (req, res) => {
             const id = req.params.id;
@@ -78,7 +107,7 @@ async function run() {
 
         // job application apis
         // get all data, get one data, get some data [o, 1, many]
-        app.get('/job-application', async (req, res) => {
+        app.get('/job-application', verifyToken, async (req, res) => {
             const email = req.query.email;
             const query = { applicant_email: email }
             const result = await jobApplicationCollection.find(query).toArray();
